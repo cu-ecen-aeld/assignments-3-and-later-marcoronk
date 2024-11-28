@@ -45,10 +45,7 @@ int ret = 0;
 
 bool do_exec(int count, ...)
 {
-    int pidId=-1;
-    int ret=-1;
-    int status = 0;
-    int waitoptions = 0;
+
     va_list args;
     va_start(args, count);
     char * command[count+1];
@@ -71,21 +68,23 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+     int status = 0;
+    pid_t pidId;
+    
     pidId = fork();
 
-    if (pidId == -1 )
+    if (pidId < 0 )
        return false;
     else 
        if (pidId == 0) {
-      execv(command[0],command);
-      return false;
+       
+      execv(command[0], command);
+      exit(1);
     }
-    else if (pidId > 0) {
-       ret = waitpid(pidId, &status, waitoptions);
-       if (ret == -1 ) {
-
+    else {       
+       if (waitpid(pidId, &status, 0) == -1)      
         return false;
-       }
+       else
        if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
         {
             return true;
@@ -96,7 +95,30 @@ bool do_exec(int count, ...)
         }
 
     }
+    /*
+ int status = 0;
+    pid_t pid;
 
+    pid = fork();
+
+    if (pid < 0)
+        return false;
+    else if (pid == 0)
+    {
+        if(execv(command[0], command) == -1)
+            exit(-1);
+    }
+
+    if (waitpid(pid, &status, 0) == -1)
+        return false;
+    else if (WIFEXITED(status)) {
+        int rc =  WEXITSTATUS(status);
+
+        if(rc != 0) return false;
+    } else {
+        return false;
+    }
+*/
     va_end(args);
 
     return true;
@@ -109,10 +131,7 @@ bool do_exec(int count, ...)
 */
 bool do_exec_redirect(const char *outputfile, int count, ...)
 {
-        int pidId=-1;
-    int ret=-1;
-    int status = 0;
-    int waitoptions = 0;
+   
     va_list args;
     va_start(args, count);
     char * command[count+1];
@@ -125,7 +144,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
     command[count] = command[count];
-
+ va_end(args);
 
 /*
  * TODO
@@ -134,6 +153,47 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+
+    int status = 0;
+    pid_t pidId;
+    int fd = open(outputfile, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+    if (fd == -1) {
+           return false;
+    }
+    fflush(stdout);
+    pidId = fork();
+
+    if (pidId < 0 ) {
+        close(fd);
+       return false;
+    }
+    else 
+       if (pidId == 0) {
+             
+      
+       if (dup2(fd, 1) < 0) 
+         return false;
+       close(fd);
+       
+       execv(command[0], command);
+       exit(1);
+    }
+    else {       
+       if (waitpid(pidId, &status, 0) == -1)      
+        return false;
+       else
+       if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+
+    }
+
+/*
     pidId = fork();
     if (pidId == -1 )
        return false;
@@ -166,9 +226,9 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
             return false;
        }
 
-    }
+    }*/
 
-    va_end(args);
+   
 
     return true;
 }
