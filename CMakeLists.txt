@@ -7,10 +7,7 @@ project(aesd-assignments)
 set(AUTOTEST_SOURCES
     test/assignment1/Test_hello.c
     test/assignment1/Test_assignment_validate.c
-<<<<<<< HEAD
-=======
     test/assignment3/Test_systemcalls.c
->>>>>>> assignments-base/assignment3-part-1
 )
 # A list of all files containing test code that is used for assignment validation
 set(TESTED_SOURCE

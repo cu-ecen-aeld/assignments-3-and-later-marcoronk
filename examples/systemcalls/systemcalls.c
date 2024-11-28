@@ -1,5 +1,11 @@
 #include "systemcalls.h"
-
+#include <stdlib.h>
+#include <unistd.h>
+ #include <sys/wait.h>
+ #include <stdio.h>
+ #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -40,9 +46,9 @@ int ret = 0;
 bool do_exec(int count, ...)
 {
     int pidId=-1;
-    int retExec=-1;
     int ret=-1;
     int status = 0;
+    int waitoptions = 0;
     va_list args;
     va_start(args, count);
     char * command[count+1];
@@ -69,9 +75,10 @@ bool do_exec(int count, ...)
 
     if (pidId == -1 )
        return false;
-    else if (pidId == 0) {
-      retExec = execv(command[0],command);
-      return false
+    else 
+       if (pidId == 0) {
+      execv(command[0],command);
+      return false;
     }
     else if (pidId > 0) {
        ret = waitpid(pidId, &status, waitoptions);
@@ -102,6 +109,10 @@ bool do_exec(int count, ...)
 */
 bool do_exec_redirect(const char *outputfile, int count, ...)
 {
+        int pidId=-1;
+    int ret=-1;
+    int status = 0;
+    int waitoptions = 0;
     va_list args;
     va_start(args, count);
     char * command[count+1];
@@ -123,11 +134,11 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
- pidId = fork();
-
+    pidId = fork();
     if (pidId == -1 )
        return false;
-    else if (pidId == 0) {
+    else 
+     if (pidId == 0) {
        int fd = open(outputfile, O_WRONLY|O_CREAT|O_TRUNC, 0644);
        if (fd == -1) {
            close(fd);
@@ -136,26 +147,24 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
        if (dup2(fd, 1) < 0) 
          return false;
        close(fd);
-      retExec = execv(command[0],command);
-      return false
+       execv(command[0],command);
+      return false;
     }
-    else if (pidId > 0) {
-
-      
-
+    else 
+    if (pidId > 0) {      
        ret = waitpid(pidId, &status, waitoptions);
        if (ret == -1 ) {
-
         return false;
        }
+
        if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
-        {
+       {
             return true;
-        }
-        else
-        {
+       }
+       else
+       {
             return false;
-        }
+       }
 
     }
 
