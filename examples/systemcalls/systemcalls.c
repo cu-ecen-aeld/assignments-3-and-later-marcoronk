@@ -95,30 +95,7 @@ bool do_exec(int count, ...)
         }
 
     }
-    /*
- int status = 0;
-    pid_t pid;
 
-    pid = fork();
-
-    if (pid < 0)
-        return false;
-    else if (pid == 0)
-    {
-        if(execv(command[0], command) == -1)
-            exit(-1);
-    }
-
-    if (waitpid(pid, &status, 0) == -1)
-        return false;
-    else if (WIFEXITED(status)) {
-        int rc =  WEXITSTATUS(status);
-
-        if(rc != 0) return false;
-    } else {
-        return false;
-    }
-*/
     va_end(args);
 
     return true;
@@ -193,42 +170,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
     }
 
-/*
-    pidId = fork();
-    if (pidId == -1 )
-       return false;
-    else 
-     if (pidId == 0) {
-       int fd = open(outputfile, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-       if (fd == -1) {
-           close(fd);
-           return false;
-       }
-       if (dup2(fd, 1) < 0) 
-         return false;
-       close(fd);
-       execv(command[0],command);
-      return false;
-    }
-    else 
-    if (pidId > 0) {      
-       ret = waitpid(pidId, &status, waitoptions);
-       if (ret == -1 ) {
-        return false;
-       }
-
-       if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
-       {
-            return true;
-       }
-       else
-       {
-            return false;
-       }
-
-    }*/
-
-   
 
     return true;
 }
