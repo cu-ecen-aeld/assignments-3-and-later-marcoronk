@@ -9,9 +9,6 @@ NUMFILES=10
 WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp/aeld-data
 username=$(cat /etc/finder-app/conf/username.txt)
-CURRENTDIR=$(dirname $0)
-RESULTDIR=/tmp 
-
 
 if [ $# -lt 3 ]
 then
@@ -51,21 +48,24 @@ then
 		exit 1
 	fi
 fi
-#echo "Removing the old writer utility and compiling as a native application"
-#make clean
-#make
+
+# Switch Between native and cross compilation
+# export CROSS_COMPILE=aarch64-none-linux-gnu-
+# echo "Removing the old writer utility and compiling as a native application"
+# make clean
+# make
 
 for i in $( seq 1 $NUMFILES)
 do
-    ${CURRENTDIR}/writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	/usr/bin/writer -f "$WRITEDIR/${username}$i.txt" -s "$WRITESTR"
 done
 
-OUTPUTSTRING=$(${CURRENTDIR}/finder.sh "$WRITEDIR" "$WRITESTR")
+OUTPUTSTRING=$(/usr/bin/finder.sh "$WRITEDIR" "$WRITESTR")
 
 # remove temporary directories
 rm -rf /tmp/aeld-data
 
-${CURRENTDIR}/writer "$RESULTDIR/assignment-4-result.txt" "$OUTPUTSTRING"
+echo ${OUTPUTSTRING} > "/tmp/${assignment}-result.txt"
 
 set +e
 echo ${OUTPUTSTRING} | grep "${MATCHSTR}"
