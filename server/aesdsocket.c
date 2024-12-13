@@ -36,7 +36,7 @@ pthread_t threadtimer_id;
 int server_socket = -1;
 int client_socket = -1;
 int file_fd = -1;
-int runThreadTimer=1;
+
 static volatile int running = 1;
 int counter = 0;
 int ret = 0;
@@ -54,15 +54,15 @@ void close_log()
 }
 
 
-void cleanupsignal()
+void cleanupsignal(int sign)
 {
-    struct Node *current = headThread;
+    //struct Node *current = headThread;
     syslog(LOG_INFO, "Cleanup aesdocket started\n");
-    runThreadTimer=0;  
-    pthread_join(threadtimer_id,NULL);
-    syslog(LOG_INFO, "Cleanup stopped thimer thread\n");
+    
+   // pthread_join(threadtimer_id,NULL);
+   // syslog(LOG_INFO, "Cleanup stopped thimer thread\n");
     running = 0;
-    while (current != NULL)
+  /*  while (current != NULL)
     {
         syslog(LOG_INFO, "Cleanup closing Socket %d for thread %s", current->client_socket, current->thread_id );
         close(current->client_socket);
@@ -76,7 +76,7 @@ void cleanupsignal()
     unlink(FILENAME);
     syslog(LOG_INFO, "Removed file %s", FILENAME);
     close_log();
-    exit(0);
+    exit(0);*/
 }
 
 void signal_handler()
@@ -141,16 +141,14 @@ void* timerThread(int value)
     struct tm *tmp;
     syslog(LOG_INFO, "Starting timer thread ....");
     while (running)
-    {
-        if (runThreadTimer == 0)
-         break;
+    { 
         usleep(TIMEFORTHREAD);
         memset(outtext, 0, 1024);
         memset(tsstring, 0, 2048);
         t = time(NULL);
         tmp = localtime(&t);
         strftime(outtext, sizeof(outtext), "%Y%m%d %H:%M:%S", tmp);
-        sprintf(tsstring,"timestamp:%s\n",outtext);
+        sprintf(tsstring,"timestamp:%s\n",outtext);        
         writefile(FILENAME, tsstring, strlen(tsstring));
     }
     syslog(LOG_INFO, "Stopping timer thread ....");
@@ -208,6 +206,8 @@ void* socketThread(void *th_param)
             }
         }
     }
+    if (buffer)
+      free(buffer);
     syslog(LOG_INFO, "Stopping socket %d for thread %ld",myThread->client_socket, myThread->thread_id);
     close(myThread->client_socket);
     myThread->finished = FINISHED;
@@ -218,12 +218,13 @@ int serversocket()
 {
 
     struct Node *myNode = NULL;
+    struct Node *current = NULL;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     //ssize_t bytes_received = 0;
     char client_ip[32];
     memset(client_ip, 0, 32);
-    int stopciclo = 1;
+    //int retv = 0;    
     syslog(LOG_INFO, "Starting aessocket....");
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0)
@@ -263,22 +264,23 @@ int serversocket()
         {
             syslog(LOG_ERR, "Failed to accept connection: %m");
             perror("Failed to accept connection");
-            return KO;
+            continue;
         }
 
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
         syslog(LOG_INFO, "Accepted connection from %s", client_ip);
-        struct Node *myNode = create_node(thread_id, client_socket, 0);
+        myNode = create_node(thread_id, client_socket, 0);
         if (pthread_create(&myNode->thread_id, NULL, socketThread, myNode) != 0)
         {
             perror("Thread creation failed");
             syslog(LOG_ERR, "Thread creation failed");
             close(client_socket);
+            free(myNode);
             break;
         }
         append_node(headThread, myNode);
         usleep(DELAY);
-        struct Node *current = headThread;
+        current = headThread;
         while (current != NULL)
         {
             if (current->finished == FINISHED)
@@ -287,17 +289,33 @@ int serversocket()
                 close(current->client_socket);
                 remove_node(headThread, current);
                 syslog(LOG_INFO, "Closed connection from %s", client_ip);
-                syslog(LOG_INFO, "Closed Socket %d for thread %s", current->client_socket, current->thread_id );
+                syslog(LOG_INFO, "Closed Socket %d for thread %ld", current->client_socket, current->thread_id );
             }
             current = current->next;
         }
-        if (headThread == NULL)
-           break;
+        //if (headThread == NULL)
+        //   break;
     }
+    current = headThread;
+    pthread_join(threadtimer_id,NULL);
+    syslog(LOG_INFO, "Cleanup stopped thimer thread %ld\n",threadtimer_id);
+    while (current != NULL)
+    {
+        syslog(LOG_INFO, "Cleanup closing Socket %d for thread %ld", current->client_socket, current->thread_id );
+        close(current->client_socket);
+        current->finished=FINISHED;
+        pthread_join(current->thread_id,NULL);
+        remove_node(headThread, current);                    
+        current = current->next;
+        syslog(LOG_INFO, "Cleanup closed Socket %d for thread %ld", current->client_socket, current->thread_id );
+    }
+    free_list(headThread);
+    if (myNode)
+      free(myNode);
 
-    //cleanup();
-    runThreadTimer=0;
-    cleanupsignal();
+    unlink(FILENAME);
+    syslog(LOG_INFO, "Removed file %s", FILENAME);
+    close_log();
 
     return 0;
 }
@@ -351,5 +369,5 @@ int main(int argc, char **argv)
         }
     }
 
-    return 0;
+    return ret;
 }
