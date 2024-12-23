@@ -3,7 +3,7 @@
  *
  *  Created on: March 1st, 2020
  *      Author: Dan Walkes
- */
+ */ 
 
 #ifndef AESD_CIRCULAR_BUFFER_H
 #define AESD_CIRCULAR_BUFFER_H
@@ -40,11 +40,11 @@ struct aesd_circular_buffer
      * The current location in the entry structure where the next write should
      * be stored.
      */
-    uint8_t in_offs;
+    uint8_t in_offs; //head
     /**
      * The first location in the entry structure to read from
      */
-    uint8_t out_offs;
+    uint8_t out_offs; // tail
     /**
      * set to true when the buffer entry structure is full
      */

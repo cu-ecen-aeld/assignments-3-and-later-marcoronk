@@ -29,6 +29,11 @@ struct aesd_dev aesd_device;
 int aesd_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
+    struct aesd_dev *dev;
+
+	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+	filp->private_data = dev; /* for other methods */
+
     /**
      * TODO: handle open
      */
@@ -101,7 +106,8 @@ int aesd_init_module(void)
         return result;
     }
     memset(&aesd_device,0,sizeof(struct aesd_dev));
-
+    aesd_circular_buffer_init(aesd_device.aesd_buffer);
+    aesd_setup_cdev(aesd_device);
     /**
      * TODO: initialize the AESD specific portion of the device
      */
