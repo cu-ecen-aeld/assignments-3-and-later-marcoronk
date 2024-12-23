@@ -32,11 +32,9 @@ int aesd_open(struct inode *inode, struct file *filp)
     struct aesd_dev *dev;
 
 	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
-	filp->private_data = dev; /* for other methods */
+	filp->private_data = dev; 
 
-    /**
-     * TODO: handle open
-     */
+    
     return 0;
 }
 
@@ -107,7 +105,7 @@ int aesd_init_module(void)
     }
     memset(&aesd_device,0,sizeof(struct aesd_dev));
     aesd_circular_buffer_init(aesd_device.aesd_buffer);
-    aesd_setup_cdev(aesd_device);
+    aesd_setup_cdev(&aesd_device);
     /**
      * TODO: initialize the AESD specific portion of the device
      */
