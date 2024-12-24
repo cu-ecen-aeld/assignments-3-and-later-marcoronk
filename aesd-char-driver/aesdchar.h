@@ -37,8 +37,8 @@ struct aesd_dev
     /**
      * TODO: Add structure(s) and locks needed to complete assignment requirements
      */
-    struct aesd_circular_buffer *aesd_buffer;
-    struct aesd_buffer_entry *aesd_entry;
+    struct aesd_circular_buffer aesd_buffer;
+    struct aesd_buffer_entry aesd_entry;
     struct cdev cdev;     /* Char device structure      */
 };
 
