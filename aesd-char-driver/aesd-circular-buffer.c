@@ -34,6 +34,10 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     */
    int current_offset = 0;
    int current_index = 0;
+   PDEBUG("out_offs %d\n",buffer->out_offs);
+   PDEBUG("in_offs %d\n",buffer->in_offs);
+   if (buffer->full)
+   PDEBUG("buffer full\n");
 	for (int i = buffer->out_offs; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED + buffer->out_offs; i++){
 		current_index = i % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
 
@@ -47,6 +51,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     return NULL;
 }
 
+
 /**
 * Adds entry @param add_entry to @param buffer in the location specified in buffer->in_offs.
 * If the buffer was already full, overwrites the oldest entry and advances buffer->out_offs to the
@@ -59,6 +64,10 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     /**
     * TODO: implement per description
     */
+    //PDEBUG("aesd_circular_buffer_add_entry buffptr %s",add_entry->buffptr);
+    PDEBUG("aesd_circular_buffer_add_entry buffer  in_offs  %d",buffer->in_offs);
+    PDEBUG("aesd_circular_buffer_add_entry buffer  out_offs %d",buffer->out_offs);
+
      if(buffer->full)                 
         buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;         
      buffer->entry[buffer->in_offs].buffptr = add_entry->buffptr;
@@ -66,7 +75,8 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
      if((buffer->in_offs +1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED == buffer->out_offs)     
         buffer->full = true;     
      buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-     
+         PDEBUG("aesd_circular_buffer_add_entry buffer  add_entry %s",add_entry->buffptr);
+
 }
 
 /**
