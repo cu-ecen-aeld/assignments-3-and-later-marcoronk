@@ -9,7 +9,6 @@
 #define AESD_CHAR_DRIVER_AESDCHAR_H_
 
 
-
 #include "aesd-circular-buffer.h"
 
 

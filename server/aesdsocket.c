@@ -3,6 +3,8 @@ Autore: M.Ronchini 14 dicembre 2024
 
 */
 #include "linkedlist.h"
+#define USE_AESD_CHAR_DEVICE 1
+
 
 #define OK 0
 #define KO -1
@@ -12,7 +14,11 @@ Autore: M.Ronchini 14 dicembre 2024
 #define BUFFERSIZE 48000
 #define DELAY 10000
 #define TIMEFORTHREAD 10000000
-#define FILENAME "/var/tmp/aesdsocketdata"
+#ifndef USE_AESD_CHAR_DEVICE
+ #define FILENAME "/var/tmp/aesdsocketdata"
+#else
+  #define FILENAME "/dev/aesdchar"
+#endif
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 // struct Node *headThread = NULL;
@@ -60,6 +66,7 @@ int readfile(char *path, char *buffer, int size)
 {
     pthread_mutex_lock(&list_mutex);
     FILE *file = fopen(path, "r");
+    syslog(LOG_INFO, "Opened  %s:\n", path);
     int read_bytes = 0;
     if (file == NULL)
     {
@@ -100,6 +107,7 @@ int writefile(char *path, char *buffer, int size)
     return written_bytes;
 }
 
+#ifndef USE_AESD_CHAR_DEVICE
 void *timerThread(void *value)
 {
     char tsstring[2048];
@@ -121,6 +129,7 @@ void *timerThread(void *value)
     syslog(LOG_INFO, "Stopping timer thread ....");
     pthread_exit(NULL);
 }
+#endif
 
 void *socketThread(void *th_param)
 {
@@ -222,9 +231,9 @@ int serversocket()
         perror("Failed to listen on server socket");
         return KO;
     }
-
-    pthread_create(&threadtimer_id, NULL, timerThread, 0);
-
+    #ifndef USE_AESD_CHAR_DEVICE
+     pthread_create(&threadtimer_id, NULL, timerThread, 0);
+    #endif
     while (running)
     {
         myNode = NULL;
@@ -256,9 +265,10 @@ int serversocket()
         removeFinishedThreads();
        
     }
-    pthread_join(threadtimer_id, NULL);
+    #ifndef USE_AESD_CHAR_DEVICE
+    pthread_join(threadtimer_id, NULL); 
     syslog(LOG_INFO, "Stopped timer thread %ld\n", threadtimer_id);
-
+    #endif
     close(server_socket);
     syslog(LOG_INFO, "Thread %d created. Bye ....", tcounter);
     close_log();
