@@ -4,6 +4,10 @@ LDFLAGS ?=-lpthread
 SRC ?= aesdsocket.c
 OBJ ?= aesdsocket
 
+
+
+
+
 default:
 	$(CROSS_COMPILE) $(CC) $(DBGFLAGS) $(LDFLAGS) -o $(OBJ) $(SRC)
 all:
