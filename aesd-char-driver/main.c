@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -67,7 +68,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
     struct aesd_dev *dev = filp->private_data; 
     struct aesd_buffer_entry *entry = NULL;
     size_t entry_offset_byte_rtn;
-    PDEBUG("READ  %zu bytes with offset %lld",count,*f_pos);  
+    PDEBUG("aesd_read  %zu bytes with offset %lld",count,*f_pos);  
     if (mutex_lock_interruptible(&dev->lock))
 		return -ERESTARTSYS;
     entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->aesd_buffer,*f_pos,&entry_offset_byte_rtn);
@@ -81,6 +82,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
         retval = btocopy;
     else 
         retval = count;    
+     PDEBUG("sendEntryToCircularBuffer insert ");
     if (copy_to_user(buf, entry->buffptr + entry_offset_byte_rtn, retval)) {
         PDEBUG("Error copy_to_user ");  
         mutex_unlock(&dev->lock);
@@ -98,7 +100,9 @@ ssize_t sendEntryToCircularBuffer(struct aesd_dev *dev){
     int posCR=-1;
     char *lastEntry=NULL;
     posCR = checkCR(dev->aesd_entry.buffptr,dev->aesd_entry.size);
+     PDEBUG("sendEntryToCircularBuffer pos CR %d %d ",posCR,dev->aesd_entry.size); 
     if ((posCR >= 0) && (posCR == dev->aesd_entry.size-1)) {   
+       PDEBUG("sendEntryToCircularBuffer insert "); 
        aesd_circular_buffer_add_entry(&dev->aesd_buffer,&dev->aesd_entry);
        dev->aesd_entry.buffptr = NULL;
        dev->aesd_entry.size = 0;
@@ -106,6 +110,52 @@ ssize_t sendEntryToCircularBuffer(struct aesd_dev *dev){
 
     return 0;
 }
+
+
+loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
+{
+    ssize_t new_pos = 0;
+    struct aesd_dev *dev = filp->private_data;   
+    int total_size = 0;
+    PDEBUG("aesd_llseek offset %d whence %d ",offset,whence);
+    switch (whence) {
+    // SEEK_SET: Imposta il puntatore ad un offset specificato rispetto all'inizio del file.
+    case SEEK_SET:
+        new_pos = filp->f_pos;
+        PDEBUG("aesd_llseek SEEK_SET %d  ",new_pos);
+        break;
+    // SEEK_CUR: Sposta il puntatore di un certo offset rispetto alla posizione attuale.
+    case SEEK_CUR:
+        new_pos = filp->f_pos + offset;
+        PDEBUG("aesd_llseek SEEK_CUR %d  ",new_pos);
+        break;
+    // SEEK_END: Sposta il puntatore di un offset rispetto alla fine del file.
+    case SEEK_END:
+        if (mutex_lock_interruptible(&dev->lock))
+		return -ERESTARTSYS;
+        for (int c=dev->aesd_buffer.out_offs; c != dev->aesd_buffer.in_offs;) {
+            total_size+=dev->aesd_buffer.entry[c].size;
+            c=(c+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+        }
+        new_pos=total_size+offset;
+        PDEBUG("aesd_llseek SEEK_END %d  total_size %d",new_pos,total_size);
+
+        mutex_unlock(&dev->lock);
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    if (new_pos < 0 || new_pos > total_size) {
+        PDEBUG("aesd_llseek error %d  total_size %d",new_pos,total_size);
+        return -EINVAL;
+    }
+
+    filp->f_pos = new_pos;
+    return new_pos;
+}
+
+
 
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
@@ -124,7 +174,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
    
    
     if (dev->aesd_entry.buffptr) {
+        PDEBUG("Primo blocco");
         size = count+dev->aesd_entry.size;      
+        PDEBUG("Provo ad allocare %d la dev_entry_size è %d",size,dev->aesd_entry.size);
         locBuffer = kmalloc(size,GFP_KERNEL);
         if (!locBuffer) {
            PDEBUG("errore nell'allocazione di memoria %lld",size);
@@ -132,6 +184,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
            mutex_unlock(&dev->lock);
            return retval;
         }
+        PDEBUG("Allocata ....");
         memset(locBuffer,size,0);
         memcpy(locBuffer,dev->aesd_entry.buffptr,dev->aesd_entry.size);
         if (copy_from_user(locBuffer+dev->aesd_entry.size, buf, count)) {
@@ -141,15 +194,24 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
          return retval;
         }
         kfree(dev->aesd_entry.buffptr);
+        PDEBUG("Allocata  free....");
         dev->aesd_entry.buffptr = locBuffer;
         dev->aesd_entry.size = size;
         sendEntryToCircularBuffer(dev);
     }
     else {
+        PDEBUG("Secondo blocco");
         dev->aesd_entry.buffptr = kmalloc(count,GFP_KERNEL);
+        if (!dev->aesd_entry.buffptr) {
+           PDEBUG("2) errore nell'allocazione di memoria %lld",size);
+           retval = -EINVAL;
+           mutex_unlock(&dev->lock);
+           return retval;
+        }
         if (copy_from_user(dev->aesd_entry.buffptr, buf, count)) {       
          retval = -EINVAL;
          mutex_unlock(&dev->lock);
+         PDEBUG("2) errore nella copy_from_user",size);
          return retval;
         }                        
         dev->aesd_entry.size = count;
@@ -158,12 +220,57 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     mutex_unlock(&dev->lock);
     return retval;
 }
+
+
+ssize_t aesd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    ssize_t retval = -ENOMEM;
+    struct aesd_dev *dev = filp->private_data; 
+    struct aesd_seekto seekto;
+    int total_size = 0;
+    PDEBUG("aesd_unlocked_ioctl cmd %d arg %d",cmd,arg);
+    if (cmd != AESDCHAR_IOCSEEKTO) {
+        retval = -ENOTTY; 
+        PDEBUG("Error no AESDCHAR_IOCSEEKTO exit ...");
+        return retval;
+    }
+
+    if (copy_from_user(&seekto, (struct aesd_seekto __user *)arg, sizeof(seekto))) {
+         PDEBUG("aesd_unlocked_ioctl Error copy_from_user");
+        return -EFAULT;
+    }
+
+    // Validate the command index
+    if (seekto.write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) {  
+        PDEBUG("aesd_unlocked_ioctl Error AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED");      
+        return -EINVAL;
+    }
+
+    if (mutex_lock_interruptible(&dev->lock))
+        return -ERESTARTSYS;
+
+    for (int c=dev->aesd_buffer.out_offs; c != seekto.write_cmd;) {
+            total_size+=dev->aesd_buffer.entry[c].size;
+            c=(c+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
+    PDEBUG("aesd_unlocked_ioctl TotalSize %d",total_size);      
+
+    filp->f_pos = total_size + seekto.write_cmd_offset;
+    PDEBUG("aesd_unlocked_ioctl f_pos %d",filp->f_pos);      
+
+    mutex_unlock(&dev->lock);
+
+
+    return retval;
+}
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek =   aesd_llseek,
+    .unlocked_ioctl = aesd_unlocked_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

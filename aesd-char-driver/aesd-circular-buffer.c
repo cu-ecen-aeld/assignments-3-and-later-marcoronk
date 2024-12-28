@@ -95,7 +95,7 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
         buffer->full = true;     
 
      buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-     
+     PDEBUG("aesd_circular_buffer_add_entry in out %d %d ",buffer->in_offs, buffer->out_offs); 
      
 }
 
