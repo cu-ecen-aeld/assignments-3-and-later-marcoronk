@@ -3,6 +3,9 @@ Autore: M.Ronchini 14 dicembre 2024
 
 */
 #include "linkedlist.h"
+#include <sys/ioctl.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
+
 #define USE_AESD_CHAR_DEVICE 1
 
 
@@ -14,6 +17,7 @@ Autore: M.Ronchini 14 dicembre 2024
 #define BUFFERSIZE 48000
 #define DELAY 10000
 #define TIMEFORTHREAD 10000000
+#define SEARCHSTRING "AESDCHAR_IOCSEEKTO:"
 #ifndef USE_AESD_CHAR_DEVICE
  #define FILENAME "/var/tmp/aesdsocketdata"
 #else
@@ -129,7 +133,7 @@ void *timerThread(void *value)
     syslog(LOG_INFO, "Stopping timer thread ....");
     pthread_exit(NULL);
 }
-#endif
+
 
 void *socketThread(void *th_param)
 {
@@ -170,6 +174,10 @@ void *socketThread(void *th_param)
             if (strchr(buffer, '\n'))
             {
                 syslog(LOG_INFO, "Found CR in %s", buffer);
+
+
+
+
                 memset(buffer, 0, BUFFERSIZE);
                 ssize_t bytes_read = readfile(FILENAME, buffer, BUFFERSIZE);
                 bytesSent = send(client_socket, buffer, bytes_read, 0);
@@ -194,7 +202,118 @@ void *socketThread(void *th_param)
     pthread_mutex_unlock(&listMutex);
     return th_param;
 }
+#endif
 
+#ifdef USE_AESD_CHAR_DEVICE
+void *socketThread(void *th_param)
+{
+    struct Node *myThread = (struct Node *)th_param;
+    char *buffer = malloc(BUFFERSIZE);
+    int bufferSize=BUFFERSIZE;
+    ssize_t bytes_received = 0;
+    int bytesSent = 0;
+    int total_bytes_read=0;
+    char *seek_str;
+    struct aesd_seekto seekto;
+
+    syslog(LOG_INFO, "Starting socket %d for thread %ld", myThread->client_socket, myThread->thread_id);
+    if (!buffer)
+    {
+        syslog(LOG_INFO, "Error allocating buffer with malloc: %m");
+        perror("Error allocating buffer with malloc");
+        myThread->finished = 1;
+        pthread_exit(NULL);
+    }
+    memset(buffer, 0, bufferSize);
+    while (running)
+    {
+        bytes_received = recv(myThread->client_socket, buffer+total_bytes_read, bufferSize - total_bytes_read - 1, 0);
+        total_bytes_read+=bytes_received;        
+        if (bytes_received == -1)
+        {
+            syslog(LOG_ERR, "Error reading socket recv: %m");
+            perror("Error reading socket recv");
+            break;
+        }
+        if (bytes_received <= 0)
+        {
+            syslog(LOG_INFO, "No more byte on socket: %m");
+            break;
+        }
+        if (strchr(buffer, '\n') != NULL)
+        {
+            break;
+        }
+
+        if (total_bytes_read == bufferSize) {
+            size_t new_buffer_size = bufferSize * 2; 
+            char *new_buffer = realloc(buffer, new_buffer_size);
+            if (new_buffer == NULL) {
+                break;
+            }
+            buffer = new_buffer;
+            bufferSize = new_buffer_size;
+            syslog(LOG_INFO,"Buffer resized to %zu byte\n", bufferSize);
+        }
+    }
+    pthread_mutex_lock(&file_mutex);
+    int file_fd = open(FILENAME, O_RDWR | O_CREAT | O_APPEND, 0644);
+    pthread_mutex_unlock(&file_mutex);  
+    seek_str = strstr(buffer, SEARCHSTRING);
+    if (seek_str) {       
+        if (sscanf(seek_str + strlen(SEARCHSTRING), "%d,%d", &seekto.write_cmd, &seekto.write_cmd_offset) == 2) {
+            syslog(LOG_INFO, "AESDCHAR_IOCSEEKTO with command %u, offset %u", seekto.write_cmd, seekto.write_cmd_offset);
+
+            pthread_mutex_lock(&file_mutex);
+            if (ioctl(file_fd, AESDCHAR_IOCSEEKTO, &seekto) == -1)
+            {
+                syslog(LOG_ERR, "ioctl AESDCHAR_IOCSEEKTO failed: %s", strerror(errno));
+                free(buffer);
+                pthread_mutex_unlock(&file_mutex); 
+                return -1;
+            }
+            syslog(LOG_INFO, "Seek operation successful");
+            char read_buffer[bufferSize];
+            ssize_t bytes_read;
+            while ((bytes_read = read(file_fd, read_buffer, bufferSize) ) > 0)
+            {
+                        if (send(myThread->client_socket,read_buffer,bytes_read,0) < 0){
+                            syslog(LOG_ERR, "Failed to send data: %s", strerror(errno));
+                            break;
+                        }   
+            }
+            pthread_mutex_unlock(&file_mutex); 
+           
+        }
+    } 
+    else {
+        pthread_mutex_lock(&file_mutex);
+        if (write(file_fd, buffer, total_bytes_read) < 0) 
+        {
+           syslog(LOG_ERR, "Write to file failed: %s", strerror(errno));
+        }
+        lseek(file_fd, 0, SEEK_SET);
+         char read_buffer[BUFFERSIZE];
+         ssize_t bytes_read;
+         while ((bytes_read = read(file_fd, read_buffer, BUFFERSIZE) ) > 0)
+         {
+            if (send(myThread->client_socket,read_buffer,bytes_read,0) < 0){
+                  syslog(LOG_ERR, "Failed to send data: %s", strerror(errno));                  
+            }   
+         }
+         lseek(file_fd, 0, SEEK_END);
+         pthread_mutex_unlock(&file_mutex);                 
+    }
+    
+    if (buffer)
+        free(buffer);
+    syslog(LOG_INFO, "Stopping socket %d for thread %ld", myThread->client_socket, myThread->thread_id);
+    pthread_mutex_lock(&listMutex);
+    myThread->finished = FINISHED;
+    pthread_mutex_unlock(&listMutex);
+    return th_param;
+}
+#endif
 int serversocket()
 {
     struct Node *myNode = NULL;
