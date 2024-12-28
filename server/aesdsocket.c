@@ -215,7 +215,7 @@ void *socketThread(void *th_param)
     int total_bytes_read=0;
     char *seek_str;
     struct aesd_seekto seekto;
-
+    int ret = 0;
     syslog(LOG_INFO, "Starting socket %d for thread %ld", myThread->client_socket, myThread->thread_id);
     if (!buffer)
     {
@@ -228,7 +228,8 @@ void *socketThread(void *th_param)
     while (running)
     {
         bytes_received = recv(myThread->client_socket, buffer+total_bytes_read, bufferSize - total_bytes_read - 1, 0);
-        total_bytes_read+=bytes_received;        
+        total_bytes_read+=bytes_received;     
+        syslog(LOG_INFO, "Received bytes buffer %s for bytes read %d",buffer,total_bytes_read);   
         if (bytes_received == -1)
         {
             syslog(LOG_ERR, "Error reading socket recv: %m");
@@ -237,11 +238,12 @@ void *socketThread(void *th_param)
         }
         if (bytes_received <= 0)
         {
-            syslog(LOG_INFO, "No more byte on socket: %m");
+            syslog(LOG_INFO, "SOCKET: No more byte on socket: %m");
             break;
         }
         if (strchr(buffer, '\n') != NULL)
         {
+            syslog(LOG_INFO, "SOCKET: Found CR. Stop read. ");
             break;
         }
 
@@ -249,30 +251,34 @@ void *socketThread(void *th_param)
             size_t new_buffer_size = bufferSize * 2; 
             char *new_buffer = realloc(buffer, new_buffer_size);
             if (new_buffer == NULL) {
-                break;
+                free(buffer);
+                syslog(LOG_ERR, "Realloc error");
+                myThread->finished = FINISHED;
+                return -1;
             }
             buffer = new_buffer;
             bufferSize = new_buffer_size;
-            syslog(LOG_INFO,"Buffer resized to %zu byte\n", bufferSize);
+            syslog(LOG_INFO,"SOCKET: Buffer resized to %zu byte\n", bufferSize);
         }
     }
     pthread_mutex_lock(&file_mutex);
     int file_fd = open(FILENAME, O_RDWR | O_CREAT | O_APPEND, 0644);
+    syslog(LOG_INFO,"SOCKET: Open file %s with fd %d\n", FILENAME,file_fd);
     pthread_mutex_unlock(&file_mutex);  
     seek_str = strstr(buffer, SEARCHSTRING);
     if (seek_str) {       
         if (sscanf(seek_str + strlen(SEARCHSTRING), "%d,%d", &seekto.write_cmd, &seekto.write_cmd_offset) == 2) {
-            syslog(LOG_INFO, "AESDCHAR_IOCSEEKTO with command %u, offset %u", seekto.write_cmd, seekto.write_cmd_offset);
+            syslog(LOG_INFO, "SOCKET: AESDCHAR_IOCSEEKTO with command %u, offset %u", seekto.write_cmd, seekto.write_cmd_offset);
 
             pthread_mutex_lock(&file_mutex);
             if (ioctl(file_fd, AESDCHAR_IOCSEEKTO, &seekto) == -1)
             {
                 syslog(LOG_ERR, "ioctl AESDCHAR_IOCSEEKTO failed: %s", strerror(errno));
-                free(buffer);
-                pthread_mutex_unlock(&file_mutex); 
-                return -1;
+                //free(buffer);
+                //pthread_mutex_unlock(&file_mutex); 
+                //return -1;
             }
-            syslog(LOG_INFO, "Seek operation successful");
+            syslog(LOG_INFO, "SOCKET: Seek operation successful");
             char read_buffer[bufferSize];
             ssize_t bytes_read;
             while ((bytes_read = read(file_fd, read_buffer, bufferSize) ) > 0)
@@ -288,20 +294,34 @@ void *socketThread(void *th_param)
     } 
     else {
         pthread_mutex_lock(&file_mutex);
-        if (write(file_fd, buffer, total_bytes_read) < 0) 
+        syslog(LOG_INFO, "SOCKET: Write buffer %s to file descriptor %d for total_bytes_read %d", buffer,file_fd,total_bytes_read);
+        if (ret = write(file_fd, buffer, total_bytes_read) < 0) 
         {
-           syslog(LOG_ERR, "Write to file failed: %s", strerror(errno));
+           syslog(LOG_ERR, "Write to file %d err %d failed: %s",file_fd,ret, strerror(errno));
+           //pthread_mutex_unlock(&file_mutex);  
+           //if (buffer)
+           //     free(buffer);
+           //return -1;
         }
-        lseek(file_fd, 0, SEEK_SET);
+        if (ret = lseek(file_fd, 0, SEEK_SET) < 0){
+            syslog(LOG_ERR, "lseek to file %d failed: %s", file_fd,strerror(errno));
+        }
+        syslog(LOG_INFO, "SOCKET: lseek %d", ret);
          char read_buffer[BUFFERSIZE];
          ssize_t bytes_read;
          while ((bytes_read = read(file_fd, read_buffer, BUFFERSIZE) ) > 0)
          {
-            if (send(myThread->client_socket,read_buffer,bytes_read,0) < 0){
+            syslog(LOG_INFO, "SOCKET: read to file %d read: %d", file_fd,bytes_read);
+            if (ret = send(myThread->client_socket,read_buffer,bytes_read,0) < 0){
                   syslog(LOG_ERR, "Failed to send data: %s", strerror(errno));                  
+                  
             }   
+            else 
+            syslog(LOG_INFO, "Sent data socket ret=%d bytesRead=%d buffer_:%s",ret,bytes_read, read_buffer); 
          }
-         lseek(file_fd, 0, SEEK_END);
+         if (bytes_read < 0)
+           syslog(LOG_ERR, "read to file %d failed: %s", file_fd,strerror(errno));
+         //lseek(file_fd, 0, SEEK_END);
          pthread_mutex_unlock(&file_mutex);                 
     }
     
