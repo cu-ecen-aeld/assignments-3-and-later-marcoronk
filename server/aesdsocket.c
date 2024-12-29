@@ -1,5 +1,5 @@
 /*
-Autore: M.Ronchini 14 dicembre 2024
+Autore: M.Ronchini 14 dicembre 2024 - 29 dicembre 2024
 
 */
 #include "linkedlist.h"
@@ -321,7 +321,6 @@ void *socketThread(void *th_param)
          }
          if (bytes_read < 0)
            syslog(LOG_ERR, "read to file %d failed: %s", file_fd,strerror(errno));
-         //lseek(file_fd, 0, SEEK_END);
          pthread_mutex_unlock(&file_mutex);                 
     }
     
@@ -341,7 +340,6 @@ int serversocket()
     socklen_t client_addr_len = sizeof(client_addr);
     char client_ip[32];
     memset(client_ip, 0, 32);
-    // int retv = 0;
     syslog(LOG_INFO, "Starting aessocket....");
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0)

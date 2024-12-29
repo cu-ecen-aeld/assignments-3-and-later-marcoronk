@@ -82,9 +82,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
         retval = btocopy;
     else 
         retval = count;    
-     PDEBUG("sendEntryToCircularBuffer insert ");
     if (copy_to_user(buf, entry->buffptr + entry_offset_byte_rtn, retval)) {
-        PDEBUG("Error copy_to_user ");  
         mutex_unlock(&dev->lock);
         retval = -EFAULT;
         return retval;
@@ -102,7 +100,6 @@ ssize_t sendEntryToCircularBuffer(struct aesd_dev *dev){
     posCR = checkCR(dev->aesd_entry.buffptr,dev->aesd_entry.size);
      PDEBUG("sendEntryToCircularBuffer pos CR %d %d ",posCR,dev->aesd_entry.size); 
     if ((posCR >= 0) && (posCR == dev->aesd_entry.size-1)) {   
-       PDEBUG("sendEntryToCircularBuffer insert "); 
        aesd_circular_buffer_add_entry(&dev->aesd_buffer,&dev->aesd_entry);
        dev->aesd_entry.buffptr = NULL;
        dev->aesd_entry.size = 0;
@@ -122,12 +119,10 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
     // SEEK_SET: Imposta il puntatore ad un offset specificato rispetto all'inizio del file.
     case SEEK_SET:
         new_pos = filp->f_pos;
-        PDEBUG("aesd_llseek SEEK_SET %d  ",new_pos);
         break;
     // SEEK_CUR: Sposta il puntatore di un certo offset rispetto alla posizione attuale.
     case SEEK_CUR:
         new_pos = filp->f_pos + offset;
-        PDEBUG("aesd_llseek SEEK_CUR %d  ",new_pos);
         break;
     // SEEK_END: Sposta il puntatore di un offset rispetto alla fine del file.
     case SEEK_END:
@@ -138,7 +133,6 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
             c=(c+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
         }
         new_pos=total_size+offset;
-        PDEBUG("aesd_llseek SEEK_END %d  total_size %d",new_pos,total_size);
 
         mutex_unlock(&dev->lock);
         break;
@@ -170,41 +164,31 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     PDEBUG("WRITE %zu bytes with offset %lld",count);
     if (mutex_lock_interruptible(&dev->lock))
         return -ERESTARTSYS;
-    PDEBUG("scrivo %s",buf);        
-   
-   
+    
     if (dev->aesd_entry.buffptr) {
-        PDEBUG("Primo blocco");
         size = count+dev->aesd_entry.size;      
-        PDEBUG("Provo ad allocare %d la dev_entry_size è %d",size,dev->aesd_entry.size);
         locBuffer = kmalloc(size,GFP_KERNEL);
         if (!locBuffer) {
-           PDEBUG("errore nell'allocazione di memoria %lld",size);
            retval = -EINVAL;
            mutex_unlock(&dev->lock);
            return retval;
         }
-        PDEBUG("Allocata ....");
         memset(locBuffer,size,0);
         memcpy(locBuffer,dev->aesd_entry.buffptr,dev->aesd_entry.size);
         if (copy_from_user(locBuffer+dev->aesd_entry.size, buf, count)) {
-         PDEBUG("Errore CopyUser 1");
          retval = -EINVAL;
          mutex_unlock(&dev->lock);
          return retval;
         }
         kfree(dev->aesd_entry.buffptr);
-        PDEBUG("Allocata  free....");
         dev->aesd_entry.buffptr = locBuffer;
         dev->aesd_entry.size = size;
         sendEntryToCircularBuffer(dev);
     }
     else {
-        PDEBUG("Secondo blocco");
         dev->aesd_entry.buffptr = kmalloc(count,GFP_KERNEL);
         dev->aesd_entry.size=0;
         if (!dev->aesd_entry.buffptr) {
-           PDEBUG("2) errore nell'allocazione di memoria %lld",size);
            retval = -EINVAL;
            mutex_unlock(&dev->lock);
            return retval;
@@ -212,7 +196,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         if (copy_from_user(dev->aesd_entry.buffptr, buf, count)) {       
          retval = -EINVAL;
          mutex_unlock(&dev->lock);
-         PDEBUG("2) errore nella copy_from_user",size);
          return retval;
         }                        
         dev->aesd_entry.size = count;
@@ -237,13 +220,11 @@ ssize_t aesd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long a
     }
 
     if (copy_from_user(&seekto, (struct aesd_seekto __user *)arg, sizeof(seekto))) {
-         PDEBUG("aesd_unlocked_ioctl Error copy_from_user");
         return -EFAULT;
     }
 
     // Validate the command index
     if (seekto.write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) {  
-        PDEBUG("aesd_unlocked_ioctl Error AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED");      
         return -EINVAL;
     }
 
@@ -254,10 +235,8 @@ ssize_t aesd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long a
             total_size+=dev->aesd_buffer.entry[c].size;
             c=(c+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
     }
-    PDEBUG("aesd_unlocked_ioctl TotalSize %d",total_size);      
 
     filp->f_pos = total_size + seekto.write_cmd_offset;
-    PDEBUG("aesd_unlocked_ioctl f_pos %d",filp->f_pos);      
 
     mutex_unlock(&dev->lock);
 

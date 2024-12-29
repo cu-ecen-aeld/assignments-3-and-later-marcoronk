@@ -40,35 +40,16 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 
 		if ((char_offset - current_offset) < buffer->entry[current_index].size){
 			*entry_offset_byte_rtn = char_offset - current_offset;
-            PDEBUG("AESDREAD: found at %d \n",current_index);
             //PDEBUG("AESDREAD: found  %s \n",buffer->entry[current_index].buffptr);
-            PDEBUG("AESDREAD: size found  %d \n",buffer->entry[current_index].size);
             //PDEBUG("AESDREAD: entry_offset_byte_rtn  %d \n",*entry_offset_byte_rtn);
 			return &buffer->entry[current_index];
 		}
 
 		current_offset += buffer->entry[current_index].size;
 	}
-    PDEBUG("AESDREAD: not found\n");
     return NULL;
 }
 
-/*
-void copy_circular_buffer(struct aesd_circular_buffer *aesd_buffer,  int *output_buffer) {
-    const char *arrayBuffer = aesd_buffer->entry;
-    int buffer_size = aesd_buffer->entry->size;
-    int head = aesd_buffer->in_offs;
-    int tail = aesd_buffer->out_offs;        
-    int num_elements = (head - tail + buffer_size) % buffer_size;
-
-
-    
-    // Copia gli elementi in ordine di inserimento
-  for (int i = 0; i < num_elements; i++) {
-        int current_index = (tail + i) % buffer_size;
-        output_buffer[i] = arrayBuffer[current_index]; // Copia i puntatori
-    }
-}*/
 
 /**
 * Adds entry @param add_entry to @param buffer in the location specified in buffer->in_offs.
@@ -95,7 +76,6 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
         buffer->full = true;     
 
      buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-     PDEBUG("aesd_circular_buffer_add_entry in out %d %d ",buffer->in_offs, buffer->out_offs); 
      
 }
 
