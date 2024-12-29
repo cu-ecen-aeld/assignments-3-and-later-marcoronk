@@ -67,7 +67,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
     ssize_t btocopy = 0;
     struct aesd_dev *dev = filp->private_data; 
     struct aesd_buffer_entry *entry = NULL;
-    size_t entry_offset_byte_rtn;
+    size_t entry_offset_byte_rtn=0;
     PDEBUG("aesd_read  %zu bytes with offset %lld",count,*f_pos);  
     if (mutex_lock_interruptible(&dev->lock))
 		return -ERESTARTSYS;
@@ -146,8 +146,8 @@ loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
         return -EINVAL;
     }
 
-    if (new_pos < 0 || new_pos > total_size) {
-        PDEBUG("aesd_llseek error %d  total_size %d",new_pos,total_size);
+    if (new_pos < 0) {
+        PDEBUG("aesd_llseek error %d  total_size %d",new_pos);
         return -EINVAL;
     }
 
@@ -202,6 +202,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     else {
         PDEBUG("Secondo blocco");
         dev->aesd_entry.buffptr = kmalloc(count,GFP_KERNEL);
+        dev->aesd_entry.size=0;
         if (!dev->aesd_entry.buffptr) {
            PDEBUG("2) errore nell'allocazione di memoria %lld",size);
            retval = -EINVAL;
@@ -315,13 +316,19 @@ void aesd_cleanup_module(void)
 {
     PDEBUG("aesd_cleanup_module");    	
     dev_t devno = MKDEV(aesd_major, aesd_minor);
+    uint8_t index = 0;
 
     cdev_del(&aesd_device.cdev);
+    struct aesd_buffer_entry *entry;
 
-    /**
-     * TODO: cleanup AESD specific poritions here as necessary
-     */
-    
+  
+     AESD_CIRCULAR_BUFFER_FOREACH(entry, &aesd_device.aesd_buffer, index)
+    {
+        if (entry->buffptr != NULL)
+        {
+            kfree(entry->buffptr);
+        }
+    }
     unregister_chrdev_region(devno, 1);
 }
 
